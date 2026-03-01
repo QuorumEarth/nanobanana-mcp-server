@@ -9,7 +9,7 @@ from fastmcp.tools.tool import ToolResult
 from mcp.types import TextContent
 from pydantic import Field
 
-from ..config.constants import MAX_INPUT_IMAGES
+from ..config.constants import MAX_INPUT_IMAGES, MAX_INPUT_IMAGES_FLASH_31
 from ..config.settings import ModelTier, ThinkingLevel
 from ..core.exceptions import ValidationError
 from ..utils.validation_utils import validate_output_path
@@ -75,36 +75,53 @@ def register_generate_image_tool(server: FastMCP):
         model_tier: Annotated[
             str | None,
             Field(
-                description="Model tier: 'flash' (speed, 1024px), 'pro' (quality, up to 4K), or 'auto' (smart selection). "
-                "Default: 'auto' - automatically selects based on prompt quality/speed indicators."
+                description="Model tier: 'flash' (speed, 1024px), 'flash_31' (balanced, thinking+grounding), "
+                "'pro' (quality, up to 4K), or 'auto' (smart selection). "
+                "Default: 'auto' - automatically selects based on prompt analysis."
             ),
         ] = "auto",
         resolution: Annotated[
             str | None,
             Field(
-                description="Output resolution: 'high', '4k', '2k', '1k'. "
-                "4K and 2K only available with 'pro' model. Default: 'high'."
+                description="Output resolution: 'high', '4k', '2k', '1k', '512px'. "
+                "4K/2K only with 'pro'. 512px only with 'flash_31'. Default: 'high'."
             ),
         ] = "high",
         thinking_level: Annotated[
             str | None,
             Field(
-                description="Reasoning depth for Pro model: 'low' (faster), 'high' (better quality). "
-                "Only applies to Pro model. Default: 'high'."
+                description="Reasoning depth: 'minimal' (Flash 3.1 default), 'low', 'high'. "
+                "Applies to Flash 3.1 and Pro models. Default: 'high'."
             ),
         ] = "high",
         enable_grounding: Annotated[
             bool,
             Field(
-                description="Enable Google Search grounding for factual accuracy (Pro model only). "
-                "Useful for real-world subjects. Default: true."
+                description="Enable Google Search grounding for factual accuracy. "
+                "Supported by Flash 3.1 and Pro models. Default: true."
             ),
         ] = True,
         aspect_ratio: Annotated[
-            Literal["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"] | None,
+            Literal[
+                "1:1",
+                "2:3",
+                "3:2",
+                "3:4",
+                "4:3",
+                "4:5",
+                "5:4",
+                "9:16",
+                "16:9",
+                "21:9",
+                "1:4",
+                "4:1",
+                "1:8",
+                "8:1",
+            ]
+            | None,
             Field(
-                description="Optional output aspect ratio (e.g., '16:9'). "
-                "See docs for supported values: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9."
+                description="Optional output aspect ratio. Extended ratios (1:4, 4:1, 1:8, 8:1) "
+                "available with flash_31 model. Standard: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9."
             ),
         ] = None,
         output_path: Annotated[
@@ -168,13 +185,13 @@ def register_generate_image_tool(server: FastMCP):
                 logger.warning(f"Invalid model_tier '{model_tier}', defaulting to AUTO")
                 tier = ModelTier.AUTO
 
-            # Validate thinking level for Pro model
+            # Validate thinking level
             try:
                 if thinking_level:
-                    _ = ThinkingLevel(thinking_level)  # Just validate
+                    _ = ThinkingLevel(thinking_level)
             except ValueError:
-                logger.warning(f"Invalid thinking_level '{thinking_level}', defaulting to HIGH")
-                thinking_level = "high"
+                logger.warning(f"Invalid thinking_level '{thinking_level}', using model default")
+                thinking_level = None
 
             # Get model selector to determine which model to use
             from ..services import get_model_selector
@@ -203,8 +220,15 @@ def register_generate_image_tool(server: FastMCP):
                 raise ValidationError("Mode must be 'auto', 'generate', or 'edit'")
 
             if input_image_paths:
-                if len(input_image_paths) > MAX_INPUT_IMAGES:
-                    raise ValidationError(f"Maximum {MAX_INPUT_IMAGES} input images allowed")
+                max_images = (
+                    MAX_INPUT_IMAGES_FLASH_31
+                    if selected_tier == ModelTier.FLASH_31
+                    else MAX_INPUT_IMAGES
+                )
+                if len(input_image_paths) > max_images:
+                    raise ValidationError(
+                        f"Maximum {max_images} input images allowed for {selected_tier.value} model"
+                    )
 
                 # Validate that all files exist
                 for i, path in enumerate(input_image_paths):
@@ -278,7 +302,6 @@ def register_generate_image_tool(server: FastMCP):
                 # Route to correct service based on selected model tier
                 if selected_tier == ModelTier.PRO:
                     # Use Pro service for high-quality generation
-                    # Note: Pro service doesn't support aspect_ratio or output_path yet
                     logger.info(f"Using PRO model: {model_info['model_id']}")
                     thumbnail_images, metadata = selected_service.generate_images(
                         prompt=prompt,
@@ -291,8 +314,24 @@ def register_generate_image_tool(server: FastMCP):
                         input_images=input_images,
                         use_storage=True,
                     )
+                elif selected_tier == ModelTier.FLASH_31:
+                    # Use Flash 3.1 service for balanced generation
+                    logger.info(f"Using FLASH_31 model: {model_info['model_id']}")
+                    thumbnail_images, metadata = selected_service.generate_images(
+                        prompt=prompt,
+                        n=n,
+                        resolution=resolution,
+                        thinking_level=ThinkingLevel(thinking_level) if thinking_level else None,
+                        include_thoughts=False,
+                        enable_grounding=enable_grounding,
+                        negative_prompt=negative_prompt,
+                        system_instruction=system_instruction,
+                        input_images=input_images,
+                        aspect_ratio=aspect_ratio,
+                        use_storage=True,
+                    )
                 else:
-                    # Use Flash service (via enhanced_image_service) for speed
+                    # Use Flash 2.5 service (via enhanced_image_service) for speed
                     logger.info(f"Using FLASH model: {model_info['model_id']}")
                     thumbnail_images, metadata = enhanced_image_service.generate_images(
                         prompt=prompt,
@@ -328,10 +367,15 @@ def register_generate_image_tool(server: FastMCP):
                     f"📊 **Model**: {selected_tier.value.upper()} tier",
                 ]
 
-                # Add Pro-specific information
+                # Add model-specific information
                 if selected_tier == ModelTier.PRO:
                     summary_lines.append(f"🧠 **Thinking Level**: {thinking_level}")
                     summary_lines.append(f"📏 **Resolution**: {resolution}")
+                    if enable_grounding:
+                        summary_lines.append("🔍 **Grounding**: Enabled (Google Search)")
+                elif selected_tier == ModelTier.FLASH_31:
+                    if thinking_level:
+                        summary_lines.append(f"🧠 **Thinking Level**: {thinking_level}")
                     if enable_grounding:
                         summary_lines.append("🔍 **Grounding**: Enabled (Google Search)")
                 summary_lines.append("")  # Blank line
@@ -395,9 +439,13 @@ def register_generate_image_tool(server: FastMCP):
                 "model_id": model_info["model_id"],
                 "requested_tier": model_tier,
                 "auto_selected": tier == ModelTier.AUTO,
-                "thinking_level": thinking_level if selected_tier == ModelTier.PRO else None,
+                "thinking_level": thinking_level
+                if selected_tier in (ModelTier.PRO, ModelTier.FLASH_31)
+                else None,
                 "resolution": resolution,
-                "grounding_enabled": enable_grounding if selected_tier == ModelTier.PRO else False,
+                "grounding_enabled": enable_grounding
+                if selected_tier in (ModelTier.PRO, ModelTier.FLASH_31)
+                else False,
                 "requested": n,
                 "returned": len(thumbnail_images),
                 "negative_prompt_applied": bool(negative_prompt),

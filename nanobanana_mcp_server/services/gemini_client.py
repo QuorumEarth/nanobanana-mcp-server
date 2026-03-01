@@ -8,6 +8,7 @@ from google.genai import types as gx
 from ..config.settings import (
     AuthMethod,
     BaseModelConfig,
+    Flash31ImageConfig,
     FlashImageConfig,
     GeminiConfig,
     ProImageConfig,
@@ -22,7 +23,11 @@ class GeminiClient:
     def __init__(
         self,
         config: ServerConfig,
-        gemini_config: GeminiConfig | BaseModelConfig | FlashImageConfig | ProImageConfig
+        gemini_config: GeminiConfig
+        | BaseModelConfig
+        | FlashImageConfig
+        | Flash31ImageConfig
+        | ProImageConfig,
     ):
         self.config = config
         self.gemini_config = gemini_config
@@ -42,7 +47,7 @@ class GeminiClient:
                 self._client = genai.Client(
                     vertexai=True,
                     project=self.config.gcp_project_id,
-                    location=self.config.gcp_region
+                    location=self.config.gcp_region,
                 )
                 self._log_auth_method(f"ADC (Vertex AI - {self.config.gcp_region})")
         return self._client
@@ -70,7 +75,9 @@ class GeminiClient:
             return []
 
         if len(images_b64) != len(mime_types):
-            raise ValueError(f"Images and MIME types count mismatch: {len(images_b64)} vs {len(mime_types)}")
+            raise ValueError(
+                f"Images and MIME types count mismatch: {len(images_b64)} vs {len(mime_types)}"
+            )
 
         parts = []
         for i, (b64, mime_type) in enumerate(zip(images_b64, mime_types, strict=False)):
@@ -96,7 +103,7 @@ class GeminiClient:
         contents: list,
         config: dict[str, Any] | None = None,
         aspect_ratio: str | None = None,
-        **kwargs
+        **kwargs,
     ) -> any:
         """
         Generate content using Gemini API with model-aware parameter handling.
@@ -202,21 +209,32 @@ class GeminiClient:
             if param in config:
                 filtered[param] = config[param]
 
+        # Flash 3.1 parameters
+        if isinstance(self.gemini_config, Flash31ImageConfig):
+            for param in ["thinking_level", "include_thoughts", "enable_grounding"]:
+                if param in config:
+                    filtered[param] = config[param]
+
         # Pro-specific parameters - NOTE: thinking_level is NOT supported by gemini-3-pro-image-preview
-        if isinstance(self.gemini_config, ProImageConfig):
-            # Resolution is handled via ImageConfig.image_size, not here
-            # Grounding is controlled via prompt/system instructions
-            # thinking_level is NOT available for this model
+        elif isinstance(self.gemini_config, ProImageConfig):
             if "thinking_level" in config:
-                self.logger.info("Note: thinking_level is not supported by gemini-3-pro-image-preview, ignoring")
+                self.logger.info(
+                    "Note: thinking_level is not supported by gemini-3-pro-image-preview, ignoring"
+                )
 
         else:
-            # Flash model - warn if Pro parameters are used
-            pro_params = ["thinking_level", "media_resolution", "output_resolution"]
-            used_pro_params = [p for p in pro_params if p in config]
-            if used_pro_params:
+            # Flash 2.5 model - warn if advanced parameters are used
+            advanced_params = [
+                "thinking_level",
+                "media_resolution",
+                "output_resolution",
+                "include_thoughts",
+                "enable_grounding",
+            ]
+            used_advanced_params = [p for p in advanced_params if p in config]
+            if used_advanced_params:
                 self.logger.warning(
-                    f"Pro-only parameters ignored for Flash model: {used_pro_params}"
+                    f"Advanced parameters ignored for Flash 2.5 model: {used_advanced_params}"
                 )
 
         return filtered
