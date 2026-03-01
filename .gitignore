@@ -72,3 +72,4 @@ blog/
 specs/
 
 .playwright-mcp/
+.worktrees/
