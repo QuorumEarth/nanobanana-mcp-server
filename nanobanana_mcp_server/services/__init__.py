@@ -90,24 +90,18 @@ def initialize_services(server_config: ServerConfig, gemini_config: GeminiConfig
 
     # Create Flash 3.1 image service
     _flash31_image_service = Flash31ImageService(
-        _flash31_gemini_client,
-        flash31_config,
-        _image_storage_service
+        _flash31_gemini_client, flash31_config, _image_storage_service
     )
 
     # Create Pro image service (Flash uses existing _file_image_service)
-    _pro_image_service = ProImageService(
-        _pro_gemini_client,
-        pro_config,
-        _image_storage_service
-    )
+    _pro_image_service = ProImageService(_pro_gemini_client, pro_config, _image_storage_service)
 
     # Create model selector (three-tier: Flash / Flash 3.1 / Pro)
     _model_selector = ModelSelector(
-        _file_image_service,    # Flash 2.5 service
-        _flash31_image_service, # Flash 3.1 service
-        _pro_image_service,     # Pro service
-        selection_config
+        _file_image_service,  # Flash 2.5 service
+        _flash31_image_service,  # Flash 3.1 service
+        _pro_image_service,  # Pro service
+        selection_config,
     )
 
 

@@ -144,9 +144,7 @@ class Flash31ImageService:
                             )
                             if thumbnail_b64:
                                 thumbnail_bytes = base64.b64decode(thumbnail_b64)
-                                thumbnail_image = MCPImage(
-                                    data=thumbnail_bytes, format="jpeg"
-                                )
+                                thumbnail_image = MCPImage(data=thumbnail_bytes, format="jpeg")
                                 all_images.append(thumbnail_image)
 
                             metadata.update(
@@ -186,9 +184,7 @@ class Flash31ImageService:
                             )
 
                 except Exception as e:
-                    self.logger.error(
-                        f"Failed to generate Flash 3.1 image {i + 1}: {e}"
-                    )
+                    self.logger.error(f"Failed to generate Flash 3.1 image {i + 1}: {e}")
                     raise
 
             progress.update(100, f"Generated {len(all_images)} image(s)")
@@ -234,23 +230,17 @@ class Flash31ImageService:
                     "Make precise edits as described."
                 )
 
-                image_parts = self.gemini_client.create_image_parts(
-                    [base_image_b64], [mime_type]
-                )
+                image_parts = self.gemini_client.create_image_parts([base_image_b64], [mime_type])
                 contents = [*image_parts, enhanced_instruction]
 
-                progress.update(
-                    40, "Sending edit request to Gemini 3.1 Flash API..."
-                )
+                progress.update(40, "Sending edit request to Gemini 3.1 Flash API...")
 
                 gen_config = {
                     "thinking_level": thinking_level.value,
                     "include_thoughts": include_thoughts,
                 }
 
-                response = self.gemini_client.generate_content(
-                    contents, config=gen_config
-                )
+                response = self.gemini_client.generate_content(contents, config=gen_config)
                 image_bytes_list = self.gemini_client.extract_images(response)
 
                 progress.update(70, "Processing edited images...")
@@ -274,14 +264,10 @@ class Flash31ImageService:
                             metadata,
                         )
 
-                        thumbnail_b64 = self.storage_service.get_thumbnail_base64(
-                            stored_info.id
-                        )
+                        thumbnail_b64 = self.storage_service.get_thumbnail_base64(stored_info.id)
                         if thumbnail_b64:
                             thumbnail_bytes = base64.b64decode(thumbnail_b64)
-                            thumbnail_image = MCPImage(
-                                data=thumbnail_bytes, format="jpeg"
-                            )
+                            thumbnail_image = MCPImage(data=thumbnail_bytes, format="jpeg")
                             mcp_images.append(thumbnail_image)
 
                         self.logger.info(
@@ -297,14 +283,12 @@ class Flash31ImageService:
                         mcp_images.append(mcp_image)
 
                         self.logger.info(
-                            f"Edited image {i + 1} with Flash 3.1 "
-                            f"(size: {len(image_bytes)} bytes)"
+                            f"Edited image {i + 1} with Flash 3.1 (size: {len(image_bytes)} bytes)"
                         )
 
                 progress.update(
                     100,
-                    f"Successfully edited image, "
-                    f"generated {len(mcp_images)} result(s)",
+                    f"Successfully edited image, generated {len(mcp_images)} result(s)",
                 )
                 return mcp_images, len(mcp_images)
 

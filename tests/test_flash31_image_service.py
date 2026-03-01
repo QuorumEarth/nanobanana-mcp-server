@@ -1,5 +1,7 @@
 """Tests for Flash 3.1 Image Service."""
+
 from unittest.mock import MagicMock
+
 import pytest
 
 from nanobanana_mcp_server.config.settings import Flash31ImageConfig, ThinkingLevel

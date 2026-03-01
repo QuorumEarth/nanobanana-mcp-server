@@ -102,7 +102,23 @@ def register_generate_image_tool(server: FastMCP):
             ),
         ] = True,
         aspect_ratio: Annotated[
-            Literal["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "1:4", "4:1", "1:8", "8:1"] | None,
+            Literal[
+                "1:1",
+                "2:3",
+                "3:2",
+                "3:4",
+                "4:3",
+                "4:5",
+                "5:4",
+                "9:16",
+                "16:9",
+                "21:9",
+                "1:4",
+                "4:1",
+                "1:8",
+                "8:1",
+            ]
+            | None,
             Field(
                 description="Optional output aspect ratio. Extended ratios (1:4, 4:1, 1:8, 8:1) "
                 "available with flash_31 model. Standard: 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9."
@@ -204,9 +220,15 @@ def register_generate_image_tool(server: FastMCP):
                 raise ValidationError("Mode must be 'auto', 'generate', or 'edit'")
 
             if input_image_paths:
-                max_images = MAX_INPUT_IMAGES_FLASH_31 if selected_tier == ModelTier.FLASH_31 else MAX_INPUT_IMAGES
+                max_images = (
+                    MAX_INPUT_IMAGES_FLASH_31
+                    if selected_tier == ModelTier.FLASH_31
+                    else MAX_INPUT_IMAGES
+                )
                 if len(input_image_paths) > max_images:
-                    raise ValidationError(f"Maximum {max_images} input images allowed for {selected_tier.value} model")
+                    raise ValidationError(
+                        f"Maximum {max_images} input images allowed for {selected_tier.value} model"
+                    )
 
                 # Validate that all files exist
                 for i, path in enumerate(input_image_paths):
@@ -417,9 +439,13 @@ def register_generate_image_tool(server: FastMCP):
                 "model_id": model_info["model_id"],
                 "requested_tier": model_tier,
                 "auto_selected": tier == ModelTier.AUTO,
-                "thinking_level": thinking_level if selected_tier in (ModelTier.PRO, ModelTier.FLASH_31) else None,
+                "thinking_level": thinking_level
+                if selected_tier in (ModelTier.PRO, ModelTier.FLASH_31)
+                else None,
                 "resolution": resolution,
-                "grounding_enabled": enable_grounding if selected_tier in (ModelTier.PRO, ModelTier.FLASH_31) else False,
+                "grounding_enabled": enable_grounding
+                if selected_tier in (ModelTier.PRO, ModelTier.FLASH_31)
+                else False,
                 "requested": n,
                 "returned": len(thumbnail_images),
                 "negative_prompt_applied": bool(negative_prompt),

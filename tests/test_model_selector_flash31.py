@@ -1,5 +1,7 @@
 """Tests for ModelSelector with Flash 3.1 tier."""
+
 from unittest.mock import MagicMock
+
 import pytest
 
 from nanobanana_mcp_server.config.settings import ModelSelectionConfig, ModelTier
@@ -32,9 +34,7 @@ def test_explicit_pro_selection(selector):
 
 def test_auto_select_balanced_prompt(selector):
     """A moderately complex prompt should select Flash 3.1."""
-    service, tier = selector.select_model(
-        "a detailed illustration of a medieval castle"
-    )
+    service, tier = selector.select_model("a detailed illustration of a medieval castle")
     assert tier == ModelTier.FLASH_31
 
 
@@ -69,16 +69,12 @@ def test_get_model_info_pro(selector):
 
 def test_auto_select_grounding_favors_flash31(selector):
     """Grounding should favor Flash 3.1 (not require Pro)."""
-    service, tier = selector.select_model(
-        "a building", enable_grounding=True
-    )
+    service, tier = selector.select_model("a building", enable_grounding=True)
     # Grounding adds quality_score but shouldn't jump all the way to Pro
     assert tier in [ModelTier.FLASH_31, ModelTier.PRO]
 
 
 def test_4k_resolution_forces_pro(selector):
     """4K resolution should force Pro model."""
-    service, tier = selector.select_model(
-        "a simple cat", resolution="4k"
-    )
+    service, tier = selector.select_model("a simple cat", resolution="4k")
     assert tier == ModelTier.PRO

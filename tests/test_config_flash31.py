@@ -1,5 +1,5 @@
 """Tests for Flash 3.1 configuration."""
-import pytest
+
 from nanobanana_mcp_server.config.settings import (
     Flash31ImageConfig,
     ModelTier,

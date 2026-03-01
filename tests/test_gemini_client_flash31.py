@@ -1,5 +1,7 @@
 """Tests for GeminiClient Flash 3.1 parameter handling."""
+
 from unittest.mock import MagicMock
+
 import pytest
 
 from nanobanana_mcp_server.config.settings import (

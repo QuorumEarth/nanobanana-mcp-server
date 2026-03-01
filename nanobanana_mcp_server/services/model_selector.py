@@ -22,7 +22,7 @@ class ModelSelector:
         flash_service: ImageService,
         flash31_service: Flash31ImageService,
         pro_service: ProImageService,
-        selection_config: ModelSelectionConfig
+        selection_config: ModelSelectionConfig,
     ):
         self.flash_service = flash_service
         self.flash31_service = flash31_service
@@ -31,10 +31,7 @@ class ModelSelector:
         self.logger = logging.getLogger(__name__)
 
     def select_model(
-        self,
-        prompt: str,
-        requested_tier: ModelTier | None = None,
-        **kwargs
+        self, prompt: str, requested_tier: ModelTier | None = None, **kwargs
     ) -> tuple[ImageService | Flash31ImageService | ProImageService, ModelTier]:
         """
         Select appropriate model based on requirements.
@@ -75,9 +72,7 @@ class ModelSelector:
             return service, tier
 
         # Fallback to Flash 3.1 for unknown values
-        self.logger.warning(
-            f"Unknown model tier '{requested_tier}', falling back to Flash 3.1"
-        )
+        self.logger.warning(f"Unknown model tier '{requested_tier}', falling back to Flash 3.1")
         return self.flash31_service, ModelTier.FLASH_31
 
     def _auto_select(self, prompt: str, **kwargs) -> ModelTier:
@@ -103,21 +98,18 @@ class ModelSelector:
 
         # Analyze prompt for quality indicators
         quality_score = sum(
-            1 for keyword in self.config.auto_quality_keywords
-            if keyword in prompt_lower
+            1 for keyword in self.config.auto_quality_keywords if keyword in prompt_lower
         )
 
         # Analyze prompt for speed indicators
         speed_score = sum(
-            1 for keyword in self.config.auto_speed_keywords
-            if keyword in prompt_lower
+            1 for keyword in self.config.auto_speed_keywords if keyword in prompt_lower
         )
 
         # Strong quality indicators (weighted heavily)
         strong_quality_keywords = ["4k", "professional", "production", "high-res", "hd"]
         strong_quality_matches = sum(
-            1 for keyword in strong_quality_keywords
-            if keyword in prompt_lower
+            1 for keyword in strong_quality_keywords if keyword in prompt_lower
         )
         quality_score += strong_quality_matches * 2
 
@@ -183,10 +175,10 @@ class ModelSelector:
                     "4K resolution",
                     "Google Search grounding",
                     "Advanced reasoning",
-                    "High-quality text rendering"
+                    "High-quality text rendering",
                 ],
                 "best_for": "Professional assets, production-ready images",
-                "emoji": "🏆"
+                "emoji": "🏆",
             }
         elif tier == ModelTier.FLASH_31:
             return {
@@ -204,7 +196,7 @@ class ModelSelector:
                     "International text rendering",
                 ],
                 "best_for": "Balanced quality and speed, complex prompts",
-                "emoji": "🚀"
+                "emoji": "🚀",
             }
         else:  # FLASH
             return {
@@ -212,11 +204,7 @@ class ModelSelector:
                 "name": "Gemini 2.5 Flash Image",
                 "model_id": "gemini-2.5-flash-image",
                 "max_resolution": "1024px",
-                "features": [
-                    "Very fast generation",
-                    "Low latency",
-                    "High-volume support"
-                ],
+                "features": ["Very fast generation", "Low latency", "High-volume support"],
                 "best_for": "Rapid prototyping, quick iterations",
-                "emoji": "⚡"
+                "emoji": "⚡",
             }
