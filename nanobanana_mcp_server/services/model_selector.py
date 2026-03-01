@@ -3,6 +3,7 @@
 import logging
 
 from ..config.settings import ModelSelectionConfig, ModelTier
+from .flash31_image_service import Flash31ImageService
 from .image_service import ImageService
 from .pro_image_service import ProImageService
 
@@ -12,25 +13,19 @@ class ModelSelector:
     Intelligent model selection and routing service.
 
     Routes image generation/editing requests to the appropriate model
-    (Flash or Pro) based on prompt analysis, explicit user preference,
-    or automatic selection logic.
+    (Flash, Flash 3.1, or Pro) based on prompt analysis, explicit user
+    preference, or automatic selection logic.
     """
 
     def __init__(
         self,
         flash_service: ImageService,
+        flash31_service: Flash31ImageService,
         pro_service: ProImageService,
         selection_config: ModelSelectionConfig
     ):
-        """
-        Initialize model selector.
-
-        Args:
-            flash_service: Gemini 2.5 Flash Image service (speed-optimized)
-            pro_service: Gemini 3 Pro Image service (quality-optimized)
-            selection_config: Selection strategy configuration
-        """
         self.flash_service = flash_service
+        self.flash31_service = flash31_service
         self.pro_service = pro_service
         self.config = selection_config
         self.logger = logging.getLogger(__name__)
@@ -40,7 +35,7 @@ class ModelSelector:
         prompt: str,
         requested_tier: ModelTier | None = None,
         **kwargs
-    ) -> tuple[ImageService | ProImageService, ModelTier]:
+    ) -> tuple[ImageService | Flash31ImageService | ProImageService, ModelTier]:
         """
         Select appropriate model based on requirements.
 
@@ -57,6 +52,10 @@ class ModelSelector:
             self.logger.info("Explicit Flash model selection")
             return self.flash_service, ModelTier.FLASH
 
+        if requested_tier == ModelTier.FLASH_31:
+            self.logger.info("Explicit Flash 3.1 model selection")
+            return self.flash31_service, ModelTier.FLASH_31
+
         if requested_tier == ModelTier.PRO:
             self.logger.info("Explicit Pro model selection")
             return self.pro_service, ModelTier.PRO
@@ -64,38 +63,38 @@ class ModelSelector:
         # Auto selection logic
         if requested_tier == ModelTier.AUTO or requested_tier is None:
             tier = self._auto_select(prompt, **kwargs)
-            service = (
-                self.pro_service if tier == ModelTier.PRO
-                else self.flash_service
-            )
+            service_map = {
+                ModelTier.FLASH: self.flash_service,
+                ModelTier.FLASH_31: self.flash31_service,
+                ModelTier.PRO: self.pro_service,
+            }
+            service = service_map[tier]
             self.logger.info(
                 f"Auto-selected {tier.value.upper()} model for prompt: '{prompt[:50]}...'"
             )
             return service, tier
 
-        # Fallback to Flash for unknown values
+        # Fallback to Flash 3.1 for unknown values
         self.logger.warning(
-            f"Unknown model tier '{requested_tier}', falling back to Flash"
+            f"Unknown model tier '{requested_tier}', falling back to Flash 3.1"
         )
-        return self.flash_service, ModelTier.FLASH
+        return self.flash31_service, ModelTier.FLASH_31
 
     def _auto_select(self, prompt: str, **kwargs) -> ModelTier:
         """
         Automatic model selection based on prompt and context analysis.
 
-        Decision factors:
-        1. Quality keywords in prompt (4k, professional, etc.)
-        2. Speed keywords in prompt (quick, draft, etc.)
-        3. Resolution requirements
-        4. Multi-image conditioning
-        5. Batch size
+        Three-tier decision:
+        - Pro: Strong quality signals (4K, professional, production)
+        - Flash 2.5: Explicit speed preference (quick, draft, sketch)
+        - Flash 3.1: Everything else (default balanced tier)
 
         Args:
             prompt: User's prompt text
             **kwargs: Additional context
 
         Returns:
-            Selected ModelTier (FLASH or PRO)
+            Selected ModelTier (FLASH, FLASH_31, or PRO)
         """
         quality_score = 0
         speed_score = 0
@@ -120,70 +119,60 @@ class ModelSelector:
             1 for keyword in strong_quality_keywords
             if keyword in prompt_lower
         )
-        quality_score += strong_quality_matches * 2  # Double weight
+        quality_score += strong_quality_matches * 2
 
         # Resolution parameter analysis
-        resolution = kwargs.get("resolution", "").lower()
-        if resolution in ["4k", "high", "2k"]:
-            quality_score += 3
-        elif resolution == "4k":
-            # 4K explicitly requires Pro model
+        resolution = kwargs.get("resolution", "").lower() if kwargs.get("resolution") else ""
+        if resolution == "4k":
             self.logger.info("4K resolution requested - Pro model required")
             return ModelTier.PRO
+        elif resolution in ["high", "2k"]:
+            quality_score += 3
 
         # Batch size consideration
         n = kwargs.get("n", 1)
         if n > 2:
-            # Multiple images favor speed
             speed_score += 1
-            self.logger.debug(f"Multiple images requested (n={n}), favoring speed")
 
         # Multi-image conditioning
         input_images = kwargs.get("input_images")
         if input_images and len(input_images) > 1:
-            # Pro model handles multi-image conditioning better
             quality_score += 1
-            self.logger.debug(
-                f"Multi-image conditioning ({len(input_images)} images), favoring quality"
-            )
 
         # Thinking level hint
-        thinking_level = kwargs.get("thinking_level", "").lower()
-        if thinking_level == "high":
+        thinking_level = kwargs.get("thinking_level", "")
+        if thinking_level and thinking_level.lower() == "high":
             quality_score += 1
 
         # Enable grounding hint
         enable_grounding = kwargs.get("enable_grounding", False)
         if enable_grounding:
-            quality_score += 2  # Grounding is Pro-only feature
-            self.logger.debug("Grounding requested - favoring Pro model")
+            quality_score += 2
 
-        # Decision logic
         self.logger.debug(
             f"Model selection scores - Quality: {quality_score}, Speed: {speed_score}"
         )
 
-        if quality_score > speed_score:
-            self.logger.info(
-                f"Selected PRO model (quality_score={quality_score} > speed_score={speed_score})"
-            )
+        # Three-tier decision:
+        # Pro: quality_score >= 4 (strong quality signals)
+        # Flash 2.5: speed_score > quality_score (explicit speed preference)
+        # Flash 3.1: everything else (default balanced tier)
+        if quality_score >= 4:
+            self.logger.info(f"Selected PRO model (quality_score={quality_score})")
             return ModelTier.PRO
-        else:
+        elif speed_score > quality_score:
             self.logger.info(
-                f"Selected FLASH model (speed_score={speed_score} >= quality_score={quality_score})"
+                f"Selected FLASH model (speed_score={speed_score} > quality_score={quality_score})"
             )
             return ModelTier.FLASH
+        else:
+            self.logger.info(
+                f"Selected FLASH_31 model (balanced: quality={quality_score}, speed={speed_score})"
+            )
+            return ModelTier.FLASH_31
 
     def get_model_info(self, tier: ModelTier) -> dict:
-        """
-        Get information about a specific model tier.
-
-        Args:
-            tier: Model tier to query
-
-        Returns:
-            Dictionary with model information
-        """
+        """Get information about a specific model tier."""
         if tier == ModelTier.PRO:
             return {
                 "tier": "pro",
@@ -198,6 +187,24 @@ class ModelSelector:
                 ],
                 "best_for": "Professional assets, production-ready images",
                 "emoji": "🏆"
+            }
+        elif tier == ModelTier.FLASH_31:
+            return {
+                "tier": "flash_31",
+                "name": "Gemini 3.1 Flash Image",
+                "model_id": "gemini-3.1-flash-image-preview",
+                "max_resolution": "1024px",
+                "features": [
+                    "Thinking/reasoning support",
+                    "Google Search grounding",
+                    "Up to 14 reference images",
+                    "Expanded aspect ratios (1:4, 4:1, 1:8, 8:1)",
+                    "512px resolution option",
+                    "Character consistency",
+                    "International text rendering",
+                ],
+                "best_for": "Balanced quality and speed, complex prompts",
+                "emoji": "🚀"
             }
         else:  # FLASH
             return {
