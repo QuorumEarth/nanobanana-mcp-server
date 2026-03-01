@@ -9,7 +9,15 @@ ASPECT_RATIOS = ["Square image", "Portrait", "Landscape", "16:9", "4:3"]
 # File processing constants
 THUMBNAIL_SIZE = 256
 TEMP_FILE_SUFFIX = ".tmp"
-MAX_INPUT_IMAGES = 3
+MAX_INPUT_IMAGES = 3           # Legacy default (Flash 2.5)
+MAX_INPUT_IMAGES_FLASH_31 = 14  # Flash 3.1 supports up to 14
+
+# Flash 3.1 expanded aspect ratios (in addition to standard ones)
+FLASH_31_ASPECT_RATIOS = [
+    "1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4",
+    "9:16", "16:9", "21:9",
+    "1:4", "4:1", "1:8", "8:1",  # New in Flash 3.1
+]
 
 # Image processing defaults
 DEFAULT_IMAGE_FORMAT = "png"
