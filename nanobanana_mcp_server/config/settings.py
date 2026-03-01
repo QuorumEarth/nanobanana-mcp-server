@@ -11,9 +11,10 @@ from .constants import AUTH_ERROR_MESSAGES
 
 class ModelTier(str, Enum):
     """Model selection options."""
-    FLASH = "flash"  # Speed-optimized (Gemini 2.5 Flash)
-    PRO = "pro"      # Quality-optimized (Gemini 3 Pro)
-    AUTO = "auto"    # Automatic selection
+    FLASH = "flash"        # Speed-optimized (Gemini 2.5 Flash)
+    FLASH_31 = "flash_31"  # Balanced (Gemini 3.1 Flash)
+    PRO = "pro"            # Quality-optimized (Gemini 3 Pro)
+    AUTO = "auto"          # Automatic selection
 
 
 class AuthMethod(Enum):
@@ -24,9 +25,10 @@ class AuthMethod(Enum):
 
 
 class ThinkingLevel(str, Enum):
-    """Gemini 3 thinking levels for advanced reasoning."""
-    LOW = "low"      # Minimal latency, less reasoning
-    HIGH = "high"    # Maximum reasoning (default for Pro)
+    """Gemini thinking levels for advanced reasoning."""
+    MINIMAL = "minimal"  # Minimal reasoning (Flash 3.1 default)
+    LOW = "low"          # Less reasoning
+    HIGH = "high"        # Maximum reasoning (Pro default)
 
 
 class MediaResolution(str, Enum):
@@ -127,6 +129,20 @@ class FlashImageConfig(BaseModelConfig):
     supports_thinking: bool = False
     supports_grounding: bool = False
     supports_media_resolution: bool = False
+
+
+@dataclass
+class Flash31ImageConfig(BaseModelConfig):
+    """Gemini 3.1 Flash Image configuration (balanced speed + features)."""
+    model_name: str = "gemini-3.1-flash-image-preview"
+    max_resolution: int = 1024
+    default_thinking_level: ThinkingLevel = ThinkingLevel.MINIMAL
+    supports_thinking: bool = True
+    supports_grounding: bool = True
+    supports_media_resolution: bool = False
+    enable_search_grounding: bool = False
+    max_input_images: int = 14
+    request_timeout: int = 75
 
 
 @dataclass
