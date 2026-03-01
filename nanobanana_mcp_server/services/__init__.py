@@ -4,6 +4,7 @@ import os
 from typing import Optional
 
 from ..config.settings import (
+    Flash31ImageConfig,
     FlashImageConfig,
     GeminiConfig,
     ModelSelectionConfig,
@@ -14,6 +15,7 @@ from .enhanced_image_service import EnhancedImageService
 from .file_image_service import FileImageService
 from .file_service import FileService
 from .files_api_service import FilesAPIService
+from .flash31_image_service import Flash31ImageService
 from .gemini_client import GeminiClient
 from .image_database_service import ImageDatabaseService
 from .image_storage_service import ImageStorageService
@@ -33,6 +35,8 @@ _maintenance_service: MaintenanceService | None = None
 
 # Multi-model support services
 _flash_gemini_client: GeminiClient | None = None
+_flash31_gemini_client: GeminiClient | None = None
+_flash31_image_service: Flash31ImageService | None = None
 _pro_gemini_client: GeminiClient | None = None
 _pro_image_service: ProImageService | None = None
 _model_selector: ModelSelector | None = None
@@ -50,6 +54,8 @@ def initialize_services(server_config: ServerConfig, gemini_config: GeminiConfig
         _image_storage_service, \
         _maintenance_service, \
         _flash_gemini_client, \
+        _flash31_gemini_client, \
+        _flash31_image_service, \
         _pro_gemini_client, \
         _pro_image_service, \
         _model_selector
@@ -73,12 +79,21 @@ def initialize_services(server_config: ServerConfig, gemini_config: GeminiConfig
 
     # Initialize multi-model support services
     flash_config = FlashImageConfig()
+    flash31_config = Flash31ImageConfig()
     pro_config = ProImageConfig()
     selection_config = ModelSelectionConfig.from_env()
 
     # Create separate Gemini clients for each model
     _flash_gemini_client = GeminiClient(server_config, flash_config)
+    _flash31_gemini_client = GeminiClient(server_config, flash31_config)
     _pro_gemini_client = GeminiClient(server_config, pro_config)
+
+    # Create Flash 3.1 image service
+    _flash31_image_service = Flash31ImageService(
+        _flash31_gemini_client,
+        flash31_config,
+        _image_storage_service
+    )
 
     # Create Pro image service (Flash uses existing _file_image_service)
     _pro_image_service = ProImageService(
@@ -87,10 +102,11 @@ def initialize_services(server_config: ServerConfig, gemini_config: GeminiConfig
         _image_storage_service
     )
 
-    # Create model selector
+    # Create model selector (three-tier: Flash / Flash 3.1 / Pro)
     _model_selector = ModelSelector(
-        _file_image_service,  # Flash service
-        _pro_image_service,   # Pro service
+        _file_image_service,    # Flash 2.5 service
+        _flash31_image_service, # Flash 3.1 service
+        _pro_image_service,     # Pro service
         selection_config
     )
 
@@ -156,6 +172,13 @@ def get_image_storage_service() -> ImageStorageService:
     if _image_storage_service is None:
         raise RuntimeError("Services not initialized. Call initialize_services() first.")
     return _image_storage_service
+
+
+def get_flash31_image_service() -> Flash31ImageService:
+    """Get the Flash 3.1 image service instance."""
+    if _flash31_image_service is None:
+        raise RuntimeError("Services not initialized. Call initialize_services() first.")
+    return _flash31_image_service
 
 
 def get_pro_image_service() -> ProImageService:
