@@ -6,21 +6,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This repository contains a production-ready **Nano Banana MCP Server** - an AI-powered image generation and editing server that leverages Google's Gemini models through the FastMCP framework. The codebase implements a complete MCP (Model Context Protocol) server with modular architecture, comprehensive error handling, and production-ready features.
 
-### ⭐ NEW: Nano Banana Pro Integration
+### Three-Tier Model Architecture
 
-The server now supports **Gemini 3 Pro Image** (Google's latest and most advanced image generation model) alongside the existing Gemini 2.5 Flash Image model:
+The server supports three Gemini image models with intelligent automatic routing:
 
-**Key Capabilities**:
-- 🏆 **4K Resolution**: Up to 3840px professional-grade outputs
-- 🌐 **Google Search Grounding**: Real-world knowledge integration for factual accuracy
-- 🧠 **Advanced Reasoning**: Configurable thinking levels (LOW/HIGH) for complex compositions
-- 📐 **Media Resolution Control**: Fine-grained vision processing tuning
-- 🤖 **Intelligent Model Selection**: Automatic routing based on prompt analysis
+| Tier | Model | Best For | Key Features |
+|------|-------|----------|-------------|
+| **Flash** (2.5) | `gemini-2.5-flash-image` | Rapid prototyping, quick iterations | Very fast, low latency, 1024px |
+| **Flash 3.1** | `gemini-3.1-flash-image-preview` | Balanced quality and speed | Thinking/reasoning, grounding, up to 14 reference images, expanded aspect ratios (1:4, 4:1, 1:8, 8:1), 512px option |
+| **Pro** | `gemini-3-pro-image-preview` | Professional assets, production-ready | 4K resolution, Google Search grounding, advanced reasoning |
 
-**Architecture Enhancement**:
-- `ModelSelector`: New service for intelligent model routing and selection logic
-- `ProImageService`: Dedicated service for Gemini 3 Pro Image operations
-- Multi-tier configuration: `ModelSelectionConfig`, `ProImageConfig` alongside existing `GeminiConfig`
+**Architecture**:
+- `ModelSelector`: Three-tier intelligent routing (Flash / Flash 3.1 / Pro) based on prompt analysis
+- `Flash31ImageService`: Balanced generation with thinking and grounding support
+- `ProImageService`: 4K generation with grounding and advanced reasoning
+- Multi-tier configuration: `Flash31ImageConfig`, `ProImageConfig`, `ModelSelectionConfig`
 
 ## Development Commands
 
@@ -92,9 +92,10 @@ The codebase follows a **layered architecture** with clear separation of concern
 
 **Service Layer Architecture**:
 - `GeminiClient`: Low-level API wrapper with error handling and retry logic
-- `ImageService`: High-level image operations for Flash model (generation, editing, processing)
-- **`ProImageService`** ⭐: Specialized service for Gemini 3 Pro Image with 4K support and grounding
-- **`ModelSelector`** ⭐: Intelligent routing between Flash and Pro models based on prompt analysis
+- `ImageService`: High-level image operations for Flash 2.5 model (generation, editing, processing)
+- `Flash31ImageService`: Balanced generation with Gemini 3.1 Flash (thinking, grounding, 14 ref images)
+- `ProImageService`: Specialized service for Gemini 3 Pro Image with 4K support and grounding
+- `ModelSelector`: Three-tier intelligent routing (Flash / Flash 3.1 / Pro) based on prompt analysis
 - `ImageStorageService`: Image persistence with thumbnail generation and resource management
 - `FileService`: File management and Gemini Files API integration
 - `TemplateService`: Prompt template management and parameterization
@@ -109,8 +110,9 @@ The codebase follows a **layered architecture** with clear separation of concern
 **Environment-Based Configuration** (`config/settings.py`):
 - `ServerConfig`: Server transport, host, port, error masking
 - `GeminiConfig`: Flash model settings, image limits, timeouts
-- **`ProImageConfig`** ⭐: Pro model settings (4K resolution, thinking levels, media resolution, grounding)
-- **`ModelSelectionConfig`** ⭐: Automatic model selection strategy (quality/speed keywords, default tier)
+- `Flash31ImageConfig`: Flash 3.1 model settings (thinking levels, grounding, 14 input images, 512px resolution)
+- `ProImageConfig`: Pro model settings (4K resolution, thinking levels, media resolution, grounding)
+- `ModelSelectionConfig`: Three-tier automatic model selection strategy (quality/speed keywords, default tier)
 - Loads from `.env` file or environment variables
 - Validates required auth credentials (API Key or Vertex AI settings) at startup
 
@@ -121,6 +123,7 @@ The codebase follows a **layered architecture** with clear separation of concern
 
 **Model Tier Enum** (`ModelTier`):
 - `FLASH`: Gemini 2.5 Flash Image (fast, 1024px)
+- `FLASH_31`: Gemini 3.1 Flash Image (balanced, thinking/grounding, 1024px)
 - `PRO`: Gemini 3 Pro Image (quality, 4K)
 - `AUTO`: Intelligent automatic selection (default)
 
@@ -160,10 +163,11 @@ The codebase follows a **layered architecture** with clear separation of concern
 
 **Generation Flow with Model Selection** ⭐:
 1. Input validation and sanitization (`core/validation.py`)
-2. **Model selection via `ModelSelector`**: Analyzes prompt/params → selects Flash or Pro
+2. **Model selection via `ModelSelector`**: Analyzes prompt/params → selects Flash, Flash 3.1, or Pro
 3. Prompt template application and enhancement (`prompts/` modules)
 4. Service-specific processing:
    - **Flash path**: `ImageService.generate_images()` → fast 1024px generation
+   - **Flash 3.1 path**: `Flash31ImageService.generate_images()` → balanced with thinking/grounding
    - **Pro path**: `ProImageService.generate_images()` → 4K with grounding/reasoning
 5. Gemini API call via `GeminiClient` with model-specific config
 6. Response processing and image extraction
@@ -172,7 +176,7 @@ The codebase follows a **layered architecture** with clear separation of concern
 9. FastMCP `Image` object creation for MCP transport
 
 **Pro Model Enhancement Features**:
-- **Thinking Levels**: `LOW` (fast) or `HIGH` (enhanced reasoning) via `ThinkingLevel` enum
+- **Thinking Levels**: `MINIMAL` (Flash 3.1 default), `LOW` (fast), or `HIGH` (enhanced reasoning) via `ThinkingLevel` enum
 - **Media Resolution**: `LOW`, `MEDIUM`, `HIGH`, `AUTO` for vision processing detail
 - **Search Grounding**: Optional Google Search integration for factual accuracy
 - **Prompt Enhancement**: Automatic narrative expansion for better Pro model understanding
@@ -203,19 +207,20 @@ The `ModelSelector` service provides automatic model selection based on multi-fa
 7. **Multi-image Conditioning**: Multiple input images favor Pro for better context
 8. **Thinking Level**: `thinking_level="HIGH"` favors Pro model
 
-**Decision Algorithm**:
+**Decision Algorithm** (three-tier):
 - Calculates quality_score and speed_score based on weighted factors
 - Strong quality indicators (4K, professional) have 2x weight
-- Pro model selected when quality_score > speed_score
-- Flash model selected otherwise (default for speed)
+- Pro model selected when quality_score >= 4 (strong quality signals)
+- Flash 2.5 selected when speed_score > quality_score (explicit speed preference)
+- Flash 3.1 selected otherwise (default balanced tier)
 
 **Usage in Tools**:
 ```python
 # In generate_image tool
-selector = ModelSelector(flash_service, pro_service, config)
+selector = ModelSelector(flash_service, flash31_service, pro_service, config)
 service, tier = selector.select_model(
     prompt=user_prompt,
-    requested_tier=model_tier,  # "flash", "pro", or "auto"
+    requested_tier=model_tier,  # "flash", "flash_31", "pro", or "auto"
     n=n,
     resolution=resolution,
     enable_grounding=enable_grounding,
